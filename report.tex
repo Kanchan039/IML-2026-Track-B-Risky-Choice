@@ -1,0 +1,184 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{enumitem}
+\setlist{itemsep=1pt,topsep=3pt}
+\captionsetup{font=small}
+\setlength{\emergencystretch}{3em}
+\hypersetup{colorlinks=true,linkcolor=blue!40!black,citecolor=blue!40!black,urlcolor=blue!40!black}
+
+% ---------- things YOU must fill in ----------
+\newcommand{\todo}[1]{\textcolor{red}{[#1]}}
+\newcommand{\studentname}{\todo{Your name}}
+\newcommand{\kaggleuser}{\todo{Kaggle username}}
+\newcommand{\privatescore}{\todo{private leaderboard AUC}}
+\newcommand{\publicscore}{\todo{public leaderboard AUC}}
+% ---------------------------------------------
+
+\title{Predicting Risky Choices for New Participants:\\
+Framing, Prospect-Theory Features and Honest Validation\\[2pt]
+\large CS-3410 / MAT-3211-1 Midterm Project, Track B (Behavioural Economics)}
+\author{\studentname \quad (Kaggle: \kaggleuser)}
+\date{Ashoka University, Monsoon 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent All data in this project are \emph{simulated}; conclusions concern the simulated system and the methods used, not real people. I predict whether a simulated participant chooses a risky prospect over a sure amount, and ask whether framing and prospect-theory-based features improve prediction for \emph{unseen} participants. With participant-grouped cross-validation, logistic regression on the four raw numbers reaches ROC-AUC $0.721$, the expected-value rule $0.727$, adding expected-value features, domain and frame $0.812$, and adding prospect-theory features $0.817$ (fold standard deviation $0.018$, so the last step is within noise). A random split is not optimistic for this model ($0.818$ vs.\ $0.817$) unless the model may use the participant identifier ($0.840$ vs.\ $0.817$). Private leaderboard score: \privatescore.
+\end{abstract}
+
+\section{Research question}
+\textbf{Question.} For \emph{new} participants, do (i) the frame and domain of a choice problem and (ii) features motivated by prospect theory improve the ranking of risky choices over a model that sees only the four problem numbers (probability, two outcomes, sure amount)?
+
+\textbf{Why it matters.} The hidden test set contains 90 participants never seen in training, so a model, and especially a validation scheme, that implicitly learns individuals will look better than it is. The question tests both which features carry transferable signal and how optimistic naive validation is.
+
+\textbf{Hypotheses (fixed before the experiments).}
+\begin{enumerate}[label=H\arabic*.]
+\item Expected-value (EV) features, domain and frame improve AUC; person details (age, numeracy, risk score) do not help for unseen people.
+\item A random row-level split gives a higher (too optimistic) AUC than a participant split, mainly if the model can recognise a person.
+\item The response time, recorded together with the choice, adds nothing; I exclude it anyway because it would not be known before choosing.
+\item Prospect-theory (PT) value-difference features add a little beyond EV features, because the data come from a stochastic PT model.
+\end{enumerate}
+
+\section{Background and related work}
+Expected-value maximisation predicts that people take the option with the higher average payoff, yet people depart from this systematically. Tversky and Kahneman's cumulative prospect theory \cite{tk92} describes choice with a value function that is concave for gains, convex for losses and steeper for losses (loss aversion, factor $\lambda$), and a probability-weighting function that overweights small probabilities. The same final-wealth problem is chosen differently when presented as gains or as losses \cite{tk81}; the frame, invisible to an EV rule, should therefore matter for prediction. I use this literature only to design \emph{fixed} features (Section~\ref{sec:methods}); no parameter is fitted to the training labels.
+
+On the methods side, observations from the same participant are correlated, so a random split places the same person in training and validation. Grouped cross-validation avoids this \cite{roberts17}. Any column that would not exist at prediction time is leakage \cite{kaufman12}; I identify and drop such columns in Section~\ref{sec:data}. Because the primary metric ranks probabilities, I also check calibration of the probabilities \cite{nm05}. All models are standard scikit-learn implementations \cite{sklearn}.
+
+\section{Data and preprocessing}\label{sec:data}
+The training file has 8{,}400 decisions of 210 participants (40 each); the test file has 3{,}600 decisions of 90 participants. No participant occurs in both files. The target \texttt{chose\_risky} is balanced ($48.2\%$ risky), so ROC-AUC (the competition metric) is appropriate. Risky-choice rates depend strongly on domain and frame (Figure~\ref{fig:one}, left): $39.8\%$ for gains in the gain frame, $55.7\%$ for the \emph{same} gain problems in the loss frame, $58.7\%$ for losses and $38.3\%$ for mixed gambles.
+
+\textbf{Leakage audit.} \texttt{realised\_\allowbreak payout\_\allowbreak inr} exists only in the training file (4{,}600 missing values) and is determined after the choice; it is dropped. \texttt{participant\_id} is used only to define validation groups, never as a feature in the final model. \texttt{response\_\allowbreak time\_\allowbreak ms} is excluded from the final model (it is measured with the choice; Experiment~3 checks that this loses nothing). Identifier columns are not features.
+
+\textbf{Preprocessing.} Numeric columns are standardised and the categorical columns (\texttt{problem\_\allowbreak domain}, \texttt{frame}, and their combination \texttt{cell}) are one-hot encoded. Both steps sit inside a scikit-learn pipeline and are fitted on training folds only.
+
+\section{Methods and experimental design}\label{sec:methods}
+\textbf{Validation.} All reported AUC values use $12$-fold \texttt{GroupKFold} on \texttt{participant\_id} with pooled out-of-fold predictions, so every participant's 40 decisions stay together, matching the unseen-participant test. The random-split comparison uses 8-fold shuffled \texttt{KFold} (seed 0). To quantify stability I also compute AUC separately on each of five grouped folds. The Kaggle test file is used once, for the final prediction.
+
+\textbf{Features} (all fixed formulas of the problem numbers; $p$ = probability of the high outcome, $H,L$ = high and low outcome, $S$ = sure amount, $E$ = endowment).
+\begin{itemize}
+\item \emph{Nominal:} $p,H,L,S$.
+\item \emph{EV features:} $\mathrm{ev}=pH+(1-p)L-S$; spread $H-L$; $\mathrm{ev}/(H-L)$; $(S-L)/(H-L)$; indicators $p\le0.10$ and $p\ge0.90$ (overweighting of extreme probabilities).
+\item \emph{Domain and frame:} one-hot domain, frame and their combination (cell), plus $\mathrm{ev}/(H-L)$ separately for each of the four cells.
+\item \emph{Prospect-theory features (new):} with $v(x)=x^{a}$ for $x\ge0$ and $v(x)=-\lambda(-x)^{a}$ for $x<0$, and $w(q)=q^{\gamma}/(q^{\gamma}+(1-q)^{\gamma})^{1/\gamma}$, 
+\[
+\mathrm{pt}=\frac{w(p)\,v(H)+w(1-p)\,v(L)-v(S)}{E+1},
+\]
+computed for four fixed parameter sets $(a,\lambda,\gamma)$: $(0.88,\,2.25,\,0.61)$, $(0.70,\,1.5,\,0.70)$, $(0.88,\,1.0,\,0.80)$ and $(0.60,\,2.5,\,0.60)$. Outcomes are used \emph{as shown to the participant} (negative deductions in the loss frame), so the frame enters the feature. This simplifies the original model (one $\gamma$, weight applied to each outcome probability). Each pt feature is also split by the four cells, and $\mathrm{ev}/(H-L)$ and $\mathrm{ev}/(E+1)$ are multiplied by age, numeracy, self-reported risk taking, time pressure and a paid-session indicator (``trait interactions'').
+\end{itemize}
+The final model has 45 numeric columns plus the one-hot columns.
+
+\textbf{Models.} Baselines (same protocol, nominal features only): (1) constant prior predictor, (2) the EV rule (score = ev, no training), (3) logistic regression, (4) LDA, (5) Gaussian Naive Bayes, (6) linear SVM. The experiments use L2-regularised logistic regression ($C=1$ for Exp.~1a--1e, $C=0.1$ for the final model; $C\in[0.03,1]$ gave the same AUC to three decimals). Only methods taught in lectures are used.
+
+\textbf{Controlled experiments.} Each changes one thing.
+\begin{itemize}
+\item \textbf{Exp.~1} (features): nominal $\to$ +EV features $\to$ +domain/frame $\to$ +person/context $\to$ +cell interactions $\to$ +PT features and trait interactions (1a--1f).
+\item \textbf{Exp.~2} (validation): random vs.\ participant split, with and without \texttt{participant\_id} as a one-hot feature.
+\item \textbf{Exp.~3} (availability): add \texttt{response\_time\_ms} to the final model.
+\end{itemize}
+Seeds: \texttt{numpy} seed 0; \texttt{KFold} \texttt{random\_state=0}; the other components are deterministic.
+
+\section{Results}
+\begin{table}[t]
+\centering\small
+\caption{Baselines, nominal features, 12-fold participant-grouped CV (pooled out-of-fold). The constant predictor scores below $0.5$ only because its fold-specific constants are slightly anti-correlated with the held-out fold's base rate; its true AUC is $0.5$.}\label{tab:base}
+\begin{tabular}{lccc}
+\toprule
+Model & ROC-AUC & Log-loss & Accuracy\\
+\midrule
+Constant (prior) & 0.458 & 0.693 & 0.518\\
+Expected-value rule & 0.727 & -- & 0.664\\
+Logistic regression & 0.721 & 0.619 & 0.662\\
+LDA & 0.716 & 0.620 & 0.657\\
+Gaussian Naive Bayes & 0.626 & 0.687 & 0.590\\
+Linear SVM & 0.718 & -- & --\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Baselines (Table~\ref{tab:base}).} The EV rule ($0.727$) is as good as any model that only sees the four raw numbers. This is expected: $pH+(1-p)L-S$ is a product of columns that a linear model cannot form. Naive Bayes is clearly worst ($0.626$), consistent with its independence assumption failing for strongly dependent numeric features.
+
+\begin{table}[t]
+\centering\small
+\caption{Experiments 1--3 (logistic regression; 12-fold participant CV unless stated).}\label{tab:exp}
+\begin{tabular}{llccc}
+\toprule
+Run & Change & ROC-AUC & Log-loss & Acc.\\
+\midrule
+1a & nominal only & 0.721 & 0.619 & 0.662\\
+1b & + EV features & 0.783 & 0.559 & 0.704\\
+1c & + domain and frame & 0.812 & 0.529 & 0.733\\
+1d & + person/context info & 0.810 & 0.530 & 0.729\\
+1e & + cell interactions (original) & 0.814 & 0.524 & 0.733\\
+\textbf{1f} & \textbf{+ PT features, trait interactions (final)} & \textbf{0.817} & \textbf{0.520} & \textbf{0.735}\\
+\midrule
+2a & final model, random 8-fold split & 0.818 & 0.518 & 0.733\\
+2b & final model, participant split & 0.817 & 0.520 & 0.735\\
+2c & + \texttt{participant\_id}, random split & 0.840 & 0.493 & 0.754\\
+2d & + \texttt{participant\_id}, participant split & 0.817 & 0.519 & 0.735\\
+\midrule
+3 & final model + response time & 0.817 & 0.520 & 0.734\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Experiment 1 (Table~\ref{tab:exp}).} EV features give the largest step ($0.721\to0.783$) and domain/frame add another $0.029$ ($0.812$), supporting H1: the frame is something an EV rule cannot see. Person and context variables do not help for unseen people ($0.810$, slightly below $0.812$), also as in H1. Cell interactions add $0.002$, and the PT features with trait interactions add a further $0.003$ ($0.817$). The standard deviation across five grouped folds is $0.018$ (fold AUCs $0.834, 0.803, 0.805, 0.802, 0.843$), so these last two steps are \emph{within noise}; H4 is therefore only weakly supported. Run 1f changes several things at once (PT features, their cell split, trait interactions, $C$), so I cannot attribute the $0.003$ to any single part; a finer ablation would be needed for that.
+
+\textbf{Experiment 2.} For the final model, random and participant splits give the same AUC ($0.818$ vs.\ $0.817$), so H2 is \emph{not} confirmed for a model that cannot identify people. When \texttt{participant\_id} is added, the random split rises to $0.840$ while the participant split stays at $0.817$: knowing a person helps only if that person was seen in training. The test set has only new people, so the participant split is the honest estimate.
+
+\textbf{Experiment 3.} Response time changes nothing ($0.817$), and its mean is almost equal for risky ($823$ ms) and safe ($807$ ms) choices; excluding it costs nothing.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.48\textwidth]{figures/fig1_choice_by_cell.png}\hfill
+\includegraphics[width=0.48\textwidth]{figures/fig4_auc_by_cell.png}
+\caption{Left: share of risky choices by domain and frame (training data). The same gain problems are chosen risky more often in the loss frame. Right: out-of-fold AUC of the final model and the EV rule in each cell.}\label{fig:one}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.48\textwidth]{figures/fig2_roc.png}\hfill
+\includegraphics[width=0.48\textwidth]{figures/fig3_calibration.png}
+\caption{Left: ROC curve of the final model (participant split) against the EV rule. Right: reliability diagram of out-of-fold probabilities.}\label{fig:two}
+\end{figure}
+
+\textbf{Final model and leaderboard.} The final model (Run 1f, $C=0.1$) was fitted once on all training data and applied once to the test file, giving the prediction file \texttt{submission.csv} with probabilities (not 0/1 labels, since AUC uses the ranking). Kaggle scores: public \publicscore, private \privatescore. The cross-validated estimate $0.817\pm0.018$ is the expectation to compare with.
+
+\section{Error analysis and limitations}
+\textbf{Where it works and where not (Figure~\ref{fig:one}, right).} The final model beats the EV rule in every cell. The easiest cell is mixed gambles (AUC $0.898$ vs.\ $0.858$ for the EV rule), then losses ($0.784$ vs.\ $0.733$), gains in the loss frame ($0.765$ vs.\ $0.722$) and, hardest, gains in the gain frame ($0.680$ vs.\ $0.632$). In the last cell choices are closest to a coin flip, so a limited achievable AUC is plausible, although I cannot verify this against the simulator.
+
+\textbf{Calibration (Figure~\ref{fig:two}, right).} Predicted probabilities follow the diagonal closely, so they can be read as probabilities. AUC is higher in paid sessions ($0.847$) than in hypothetical ones ($0.791$); I do not claim a reason, because the simulator is unknown and this is an association.
+
+\textbf{People.} Accuracy per participant ranges from $0.42$ to $0.98$ (mean $0.73$). A model that never sees a new person's history cannot know whether they are a strong risk-taker, so the extremes are predicted worst. Person details do not fix this, as Experiment~1 shows.
+
+\textbf{Limitations.}
+\begin{itemize}
+\item The data are simulated; no behavioural claim about real people follows.
+\item The simulator's choices are stochastic, so a perfect score is impossible; further feature engineering would give diminishing returns, and the improvements from 1d to 1f are within fold noise ($0.018$).
+\item Only 210 training participants; I use one CV run per model, and I selected the final model with the same CV, so $0.817$ may be slightly optimistic.
+\item PT parameters are fixed, typical literature values (not the simulator's), and the PT form is simplified.
+\item Linear models only; I tried no tree-based or nonlinear models in this report.
+\item Associations only, not causal effects.
+\end{itemize}
+
+\section{Conclusion}
+For unseen participants, framing and domain are the key information beyond the raw numbers (AUC $0.721\to0.812$), because an EV rule cannot see the frame. Prospect-theory features with a separate slope per domain/frame cell add a small further gain ($0.817$) that is within fold noise. A random split is not optimistic for a model without person identifiers, but becomes so ($0.840$ vs.\ $0.817$) when identifiers are available, so grouped validation is the right choice for this task. Response time and person traits add nothing for new people.
+
+\paragraph{AI-assistance declaration.} \todo{Edit to describe truthfully which AI tool you used and for what, e.g.\ ``Claude (Anthropic) helped with code structure, feature ideas and drafting this report; I can explain every line.''}
+
+\begin{thebibliography}{9}\small
+\bibitem{tk92} A.~Tversky and D.~Kahneman. Advances in prospect theory: Cumulative representation of uncertainty. \emph{Journal of Risk and Uncertainty}, 5(4):297--323, 1992.
+\bibitem{tk81} A.~Tversky and D.~Kahneman. The framing of decisions and the psychology of choice. \emph{Science}, 211(4481):453--458, 1981.
+\bibitem{roberts17} D.~R. Roberts et al. Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure. \emph{Ecography}, 40(8):913--929, 2017.
+\bibitem{kaufman12} S.~Kaufman, S.~Rosset, C.~Perlich, and O.~Stitelman. Leakage in data mining: Formulation, detection, and avoidance. \emph{ACM TKDD}, 6(4):1--21, 2012.
+\bibitem{nm05} A.~Niculescu-Mizil and R.~Caruana. Predicting good probabilities with supervised learning. In \emph{Proc.\ ICML}, pages 625--632, 2005.
+\bibitem{sklearn} F.~Pedregosa et al. Scikit-learn: Machine learning in Python. \emph{JMLR}, 12:2825--2830, 2011.
+\end{thebibliography}
+
+\end{document}

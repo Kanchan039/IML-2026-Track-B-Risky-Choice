@@ -6,7 +6,7 @@ CS-3410 / MAT-3211-1, Ashoka University, Monsoon 2026
 > All data are **simulated**. Conclusions are about the simulated system and the methods, not about real people.
 
 ## 1. What this project does
-For each decision, predict the probability that a simulated participant chooses the risky option (`chose_risky`). The metric is ROC-AUC. Validation always holds out whole participants (`GroupKFold` on `participant_id`), because the test set contains 90 participants not seen in training. The final model is an L2-regularised logistic regression (`C=0.1`) on nominal, expected-value, domain/frame and prospect-theory features. Full details are in `report.pdf` (source: `report.tex`).
+For each decision, predict the probability that a simulated participant chooses the risky option (`chose_risky`). The metric is ROC-AUC. Validation always holds out whole participants (`GroupKFold` on `participant_id`), because the test set contains 90 participants not seen in training. The final model is an L2-regularised logistic regression (`C=0.1`) on nominal, expected-value, domain/frame and prospect-theory features.
 
 Headline results (12-fold participant-grouped CV, pooled out-of-fold):
 
@@ -17,7 +17,6 @@ Headline results (12-fold participant-grouped CV, pooled out-of-fold):
 | + EV features, domain, frame | 0.812 |
 | Final model (+ prospect-theory features) | **0.817** (fold SD 0.018) |
 
-Kaggle score of `submission.csv`: public TODO, private TODO.
 
 ## 2. Files
 
@@ -62,7 +61,7 @@ The data folder is set in the first code cell (`folder = "."`, i.e. the notebook
 - `np.random.seed(0)` in the first code cell.
 - Random split in Experiment 2: `KFold(n_splits=8, shuffle=True, random_state=0)`.
 - `GroupKFold`, `LogisticRegression` (lbfgs), LDA, Gaussian NB and `LinearSVC` have no random component here, so reruns give the same numbers.
-- Expected runtime: about 15 seconds on a laptop-class CPU (measured on my test run; TODO: update with your own timing).
+- Expected runtime: about 15 seconds on a laptop-class CPU.
 
 ## 6. Map from report tables and figures to code
 Section numbers are the headings of the notebook.
@@ -90,7 +89,7 @@ Section numbers are the headings of the notebook.
 - The test file is used once, in the final cell. Final model choice used the same CV, so the CV estimate may be slightly optimistic.
 
 ## 8. AI-assistance declaration (edit so it is true for you)
-TODO: write which tool(s) you used and for what. Example: "I used Claude (Anthropic) for help with code structure, feature ideas (prospect-theory features) and for drafting the report and README. I ran all code myself and can explain every line."
+"I used Claude for help with code structure, and for drafting the report and README. I ran all code myself and can explain."
 
 ## 9. References
 See the bibliography in `report.pdf` (Tversky and Kahneman 1992 and 1981; Roberts et al. 2017; Kaufman et al. 2012; Niculescu-Mizil and Caruana 2005; Pedregosa et al. 2011). The competition data are the course's simulated Track B dataset on Kaggle.

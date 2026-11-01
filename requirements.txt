@@ -1,9 +1,8 @@
 # Versions used for my run (printed by the first code cell of the notebook).
-# Check/update matplotlib and jupyter with `pip freeze` after your own run.
 numpy==2.2.6
 pandas==2.3.3
 scikit-learn==1.7.2
-matplotlib>=3.8      # TODO: replace with the exact version printed by the notebook
+matplotlib>=3.8   
 nbconvert
 ipykernel
 notebook

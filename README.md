@@ -1,7 +1,7 @@
 # IML Midterm Project: Track B (Behavioural Economics), predicting risky choices
 
 CS-3410 / MAT-3211-1, Ashoka University, Monsoon 2026
-**Name:** TODO | **Kaggle username:** TODO | **Track:** B (simulated risky choice)
+**Name:** Kanchan Bharti | **Kaggle username:** kanchanbharti039 | **Track:** B (simulated risky choice)
 
 > All data are **simulated**. Conclusions are about the simulated system and the methods, not about real people.
 

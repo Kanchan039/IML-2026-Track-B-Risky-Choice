@@ -69,7 +69,7 @@ Section numbers are the headings of the notebook.
 | Report item | Notebook section | Output file |
 |---|---|---|
 | Data statistics (Section 3 of the report: sizes, 210/90 participants, 48.2% risky, leakage audit) | 2. Check the data and remove leakage | printed output |
-| Figure 1 (left): risky share by domain/frame | 2. (quick look cell) | `figures/fig1_choice_by_cell.png` |
+| Figure 1 (left): risky share by domain/frame | 2. cell 3 | `figures/fig1_choice_by_cell.png` |
 | Features, including prospect-theory features | 3. Make new features | none |
 | Table 1: baselines | 5. Baselines | `experimental_results.csv` (Baseline rows) |
 | Table 2, runs 1a--1f | 6. Experiment 1 | `experimental_results.csv` (Exp1 rows) |

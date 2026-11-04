@@ -1,0 +1,312 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{microtype,amsmath,amssymb,graphicx,booktabs,tabularx,enumitem}
+\usepackage[numbers]{natbib}
+\usepackage[hidelinks]{hyperref}
+\setlist{itemsep=1pt,topsep=3pt}
+
+\title{Predicting risky choices for new participants}
+\author{Kanchan Bharti \quad [5020261053] \quad kanchanbharti039\\
+  \small Track B Behavioural Economics \quad
+  Team: TDI Lake Grove\\
+  \small CS-3410 / MAT-3211-1 Introduction to Machine Learning, Ashoka University}
+\date{4 November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+I ask whether the gain/loss framing of a gamble and expected-value (EV) features help to predict whether
+a \emph{previously unseen} participant picks the risky option over a sure amount. The data are
+\textbf{simulated} (8\,400 decisions from 210 participants). I compare an EV rule, four lecture models and
+a logistic regression with engineered features under participant-grouped 5-fold cross-validation, and
+test the effect of the split and of \texttt{response\_time\_ms}. EV features raise ROC-AUC from
+$0.723\pm0.011$ (raw numbers) to $0.785\pm0.015$ and domain/frame to $0.814\pm0.014$; person traits add
+nothing. The final rank-average of logistic regression and ExtraTrees reaches $0.820\pm0.011$
+(fold mean $\pm$ s.d.), a gain of only $0.002$ over logistic regression alone. The main limitation is that the
+data are simulated and noisy, so the estimates say nothing about real people and the last few thousandths
+of AUC cannot be separated from fold noise.
+\end{abstract}
+
+\section{Research question}
+\textbf{Question.} For new participants, do (i) the gain/loss frame and problem domain and (ii) features based on
+expected value predict risky choice better than a model that only sees the raw problem numbers?
+Predictions are scored by ROC-AUC on a held-out set of participants.
+
+\textbf{Expectation.} I expected EV and frame features to improve AUC, and person details (age, numeracy,
+self-reported risk taking) not to help for unseen people. The expectation would be \emph{contradicted} if the
+frame/domain features added no AUC beyond EV features, or if person traits improved held-out AUC.
+Two further expectations are tested in Section~\ref{sec:exps}: a random split is optimistic compared with a
+participant split, and \texttt{response\_time\_ms} adds nothing.
+
+\section{Background and related work}
+Expected value is the classical benchmark for choice under risk, but people depart from it in systematic ways.
+Prospect theory describes choices as depending on gains and losses relative to a reference point, with a value
+function that is steeper for losses and a probability weighting that overweights small probabilities
+\citep{kahneman1979,tversky1992}. The same outcomes presented as gains or as losses lead to different choices
+\citep{tversky1981}, so the \emph{frame} should carry information that EV cannot. The simulator behind this
+dataset is prospect-theory-like, so I build a few fixed prospect-theory value differences as features (no
+parameter is fitted to data).
+
+On the methodological side, observations from the same person are not independent, so the validation split must
+follow the structure of the data; otherwise performance is overestimated \citep{roberts2017}. I report ROC-AUC,
+which depends only on the ranking of scores \citep{fawcett2006}. Besides lecture models I use Extremely
+Randomized Trees \citep{geurts2006}, via scikit-learn \citep{pedregosa2011}.
+
+\section{Data and preprocessing}
+\textbf{Data.} The Kaggle ``Track B: risky choice'' data (\emph{simulated}): \texttt{train.csv} has 8\,400
+decisions from 210 participants (40 each) and \texttt{test.csv} 3\,600 decisions from 90 \emph{different}
+participants (no overlap). Each row is one choice between a risky gamble (probability \texttt{prob\_high} of
+\texttt{risky\_high\_inr}, otherwise \texttt{risky\_low\_inr}) and a sure amount. The target
+\texttt{chose\_risky} is balanced (48.2\% risky). The four combinations of domain and frame are
+gain/gain-frame, gain/loss-frame, loss/none and mixed/none; the frame manipulation exists only within the gain
+domain.
+
+\textbf{Audit and exclusions.} The only missing values are in \texttt{realised\_payout\_inr} (4\,600 of 8\,400),
+which is the money paid \emph{after} the choice and is absent from the test file; it is dropped as leakage.
+\texttt{response\_time\_ms} is measured while the person decides, so it is not available before the choice; it is
+excluded from all final models and used only in a control experiment. \texttt{trial\_index} is known in advance
+and is allowed (used by the tree model only).
+
+\textbf{Features.} All formulas use only the problem numbers, so nothing is learned from the data:
+the EV difference $\mathrm{EV}=p\,x_H+(1-p)\,x_L-s$ and quantities derived from it (EV divided by the
+stakes spread and by the endowment, the position of the sure amount within the gamble, indicators for
+$p\le0.1$ and $p\ge0.9$); four fixed prospect-theory value differences (parameter sets
+$(\alpha,\lambda,\gamma)$ taken from the literature range, normalised by the endowment); and interactions of EV and
+prospect-theory scores with the domain/frame cell, and of EV with person traits. This gives 48 columns for the
+linear model and 24 for the tree model. Scaling and one-hot encoding are inside the scikit-learn pipeline and are
+fitted on training folds only.
+
+\section{Methods and experimental design}
+\subsection{Validation protocol}
+Test participants are all new, so I use \texttt{GroupKFold} on \texttt{participant\_id}: the 40 decisions of a
+person never appear in both training and validation folds. I use $k=5$ shuffled folds with seed 0, and the
+\emph{same} folds for every model, which allows paired comparisons. I report the mean and standard deviation
+(over the 5 folds) of AUC, log-loss and accuracy at threshold 0.5. The only tuned quantity was the
+L2 strength $C$ of logistic regression, scanned over $\{0.003,0.03,0.1,1\}$ on the same folds; AUC was flat
+(Table~\ref{tab:appC}) and I fixed $C=0.1$. The final model choice was made on the same cross-validation, so the
+estimate may be slightly optimistic. No test labels were used.
+
+\subsection{Baselines}
+(1) A constant prior predictor (trivial baseline: AUC must be 0.5). (2) The EV rule, scoring each decision by
+the EV difference, with no training; this is the economic benchmark. (3)--(6) Logistic regression, LDA, Gaussian
+Naive Bayes and a linear SVM from the lectures, each on the four raw problem columns only. They show what
+standard models achieve without feature engineering.
+
+\subsection{Controlled experiments}\label{sec:exps}
+\begin{enumerate}
+\item \textbf{Experiment 1, feature groups.} \emph{Change:} feature groups are added one at a time to a logistic
+  regression: (a) raw numbers; (b) + EV features; (c) + domain/frame; (d) + person and session traits;
+  (e) + frame$\times$EV interactions; (f) + prospect-theory and trait interactions. \emph{Control:} model class,
+  folds and metric. \emph{Expectation:} (b) and (c) help; (d) does not.
+\item \textbf{Experiment 2, split scheme.} \emph{Change:} random 5-fold split versus participant-grouped split,
+  with the final logistic regression, and again after adding a one-hot \texttt{participant\_id}.
+  \emph{Control:} model, features, number of folds. \emph{Expectation:} the random split is optimistic, especially
+  when the model can identify the person.
+\item \textbf{Experiment 3, response time.} \emph{Change:} add \texttt{response\_time\_ms} to the final
+  logistic regression. \emph{Control:} everything else. \emph{Expectation:} no gain, so excluding it costs nothing.
+\end{enumerate}
+Finally I compare ExtraTrees (300 trees, minimum leaf 30, 60\% of features per split) and the \textbf{rank
+average} of the final logistic regression and ExtraTrees. Because AUC depends only on ordering, averaging ranks is a
+safe way to combine models; the submitted values are therefore scores in $[0,1]$, not calibrated probabilities.
+
+\section{Results}
+Table~\ref{tab:main} gives the main results; Figure~\ref{fig:overview} shows the framing effect, ROC curves and
+calibration; paired differences are in Table~\ref{tab:paired} (Appendix).
+
+\begin{table}[ht]
+\centering
+\caption{Participant-grouped 5-fold validation (seed 0). Mean $\pm$ standard deviation over 5 folds. A dash means the
+model gives no probabilities (log-loss) or no threshold (accuracy). Rows in bold: final logistic regression and
+submitted blend.}\label{tab:main}
+\small
+\begin{tabularx}{\linewidth}{@{}Xccc@{}}
+\toprule
+Model (features) & ROC-AUC & Log-loss & Accuracy \\
+\midrule
+Constant prior (trivial)            & $0.500\pm0.000$ & $0.693\pm0.002$ & $0.518\pm0.032$ \\
+Expected-value rule                 & $0.728\pm0.014$ & --              & $0.664\pm0.010$ \\
+Logistic regression (raw 4)         & $0.723\pm0.011$ & $0.619\pm0.010$ & $0.663\pm0.011$ \\
+LDA (raw 4)                         & $0.718\pm0.012$ & $0.620\pm0.009$ & $0.656\pm0.013$ \\
+Gaussian Naive Bayes (raw 4)        & $0.629\pm0.016$ & $0.688\pm0.017$ & $0.588\pm0.016$ \\
+Linear SVM (raw 4)                  & $0.720\pm0.011$ & --              & --              \\
+\midrule
+LR + EV features                    & $0.785\pm0.015$ & $0.559\pm0.015$ & $0.704\pm0.014$ \\
+\quad + domain and frame            & $0.814\pm0.014$ & $0.529\pm0.017$ & $0.732\pm0.016$ \\
+\quad + person/session traits       & $0.812\pm0.014$ & $0.531\pm0.017$ & $0.732\pm0.012$ \\
+\quad + frame$\times$EV interactions (no traits) & $0.816\pm0.011$ & $0.525\pm0.015$ & $0.734\pm0.012$ \\
+\textbf{\quad + prospect-theory, trait interactions (final LR)} & $\mathbf{0.818\pm0.013}$ & $\mathbf{0.520\pm0.016}$ & $\mathbf{0.734\pm0.015}$ \\
+ExtraTrees                          & $0.819\pm0.010$ & $0.519\pm0.013$ & $0.734\pm0.013$ \\
+\textbf{Rank average LR + ExtraTrees (submitted)} & $\mathbf{0.820\pm0.011}$ & -- & -- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{fig_overview.png}
+\caption{(a) Share of risky choices per domain/frame cell in the training data. (b) ROC curves from pooled
+out-of-fold predictions (pooled AUCs in the legend differ slightly from the fold means in Table~\ref{tab:main}).
+(c) Calibration of the final logistic regression, 10 bins.}\label{fig:overview}
+\end{figure}
+
+\textbf{Experiment 1.} Raw-number models are no better than the EV rule ($\approx0.72$ vs.\ $0.728$), because EV is a
+product of probability and outcome that a linear model on raw columns cannot form: the model class matters much
+less than the features. Adding EV features raises AUC by $0.062$, and adding domain/frame by a further
+$0.029\pm0.003$ (paired over folds; positive in all 5). Person and session traits do \emph{not} help
+($-0.002\pm0.003$), and frame$\times$EV interactions and prospect-theory features add only $\approx0.002$ each, within
+fold noise ($\mathrm{s.d.}\approx0.003$). The final logistic regression beats the EV rule by $0.090\pm0.011$.
+Hypothesis 1 is supported.
+
+\textbf{Experiment 2.} Random and participant-grouped splits give the same AUC for the final model ($0.818$ in
+both; paired difference $-0.0004\pm0.022$): the random split is \emph{not} optimistic here, so that part of my
+expectation was wrong. This is plausible because the model has no way to identify a person. Once a one-hot
+\texttt{participant\_id} is added, the random split gives $0.839\pm0.013$, whereas the participant split stays at $0.818$
+(no gain, as the test participants are unknown to the model). The paired gap is $+0.021\pm0.022$ over 5 folds, so it is
+consistent in direction with the expectation but noisy given only five folds.
+
+\textbf{Experiment 3.} Adding \texttt{response\_time\_ms} changes AUC by $-0.0001\pm0.0008$ (mean response time is 807~ms
+for safe and 823~ms for risky choices), so excluding it loses nothing.
+
+\textbf{Stronger models.} ExtraTrees alone is about equal to the logistic regression ($+0.0003\pm0.0045$), and the rank
+average improves on the logistic regression by $+0.0018\pm0.0021$ (positive in 4 of 5 folds). This is about two standard errors
+of the paired difference at best, so I regard the blend as at most a small improvement and use it because it was never
+clearly worse. The submitted blend has validation AUC $0.820\pm0.011$.
+
+\section{Error analysis and limitations}
+\textbf{Where the model fails.} AUC differs strongly by cell (Table~\ref{tab:cell} in the Appendix): the easiest cell is
+mixed gambles (blend AUC $0.90$), the hardest is gain problems in the gain frame ($0.68$). The model beats the EV rule in every
+cell, with the largest gain in loss problems ($0.79$ vs.\ $0.73$). Performance is better in paid sessions (AUC $0.85$,
+45\% of data) than hypothetical sessions ($0.79$). Per-participant accuracy of the final logistic regression ranges from $0.43$
+to $0.95$ (mean $0.73$, s.d.\ $0.10$; Figure~\ref{fig:pacc} in the Appendix): the model has no information on whether a
+new person is a strong risk taker or very careful, and traits such as the self-reported risk score did not
+help. Calibration of the logistic regression is good (mean absolute gap between predicted and observed
+share $0.007$, 10 bins), but the submitted blend is a rank score and is not calibrated.
+
+\textbf{Limitations.} (i) The data are simulated, with random noise in the choice, so a perfect score is impossible and
+nothing here says how real people behave; the findings only describe this generator. (ii) With 210 participants and
+5 folds, differences below about $0.003$ AUC are not reliable; the standard deviations are spread over folds, not over
+repeated experiments. (iii) The model choice and $C$ were selected on the same cross-validation, so $0.82$ may be
+slightly optimistic for the test set. (iv) The frame effect (risky share $0.56$ vs.\ $0.40$ in the gain domain) is an
+association in the data: I have not verified that the problems shown in the two frames are matched, and the frame is
+only varied within the gain domain, so frame and domain cannot be separated outside it. (v) The prospect-theory features
+use a few fixed parameter sets and no parameter is estimated, so they are only a rough approximation of the simulator.
+
+\section{Conclusion}
+For new participants, domain/frame and EV-based features clearly help: validation AUC rises from $0.72$ for the raw numbers
+(and $0.73$ for the EV rule) to about $0.82$, whereas age, numeracy and self-reported risk taking add nothing for unseen
+people. The result is limited to simulated data; a blend of logistic regression and ExtraTrees gives the best, but only marginally
+better, score ($0.820\pm0.011$).
+
+\section*{Reproducibility statement}
+Code: The submitted ZIP file contains the notebook \texttt{Kanchan\_Bharti\_IML\_Mid\_term\_Project.ipynb}, a \texttt{README.md}, and a pinned \texttt{requirements.txt}. The repository is available at \href{https://github.com/Kanchan039/IML-2026-Track-B-Risky-Choice}{\texttt{IML-Mid\_Term\_Project}}.
+Environment: Python 3.12 (pandas 2.3.3, numpy 2.2.6, scikit-learn 1.7.2, scipy 1.15.3, matplotlib 3.10.7).
+Command: set \texttt{folder} in the first code cell and run all cells of the notebook (or \texttt{jupyter nbconvert --to notebook --execute}); it regenerates every number, table and figure in this report and saves \texttt{experimental\_results.csv} and \texttt{submission.csv} into that folder.
+Seeds: folds and ExtraTrees use seed 0 and the output is identical across reruns. Runtime: a few minutes on one CPU core.
+No neural networks or pretrained models were used. Generative AI (Claude) was used and is declared in the README.
+
+\bibliographystyle{unsrtnat}
+\begin{thebibliography}{6}
+\bibitem{kahneman1979}
+Kahneman, D. and Tversky, A. Prospect theory: an analysis of decision under risk.
+\emph{Econometrica}, 47(2):263--291, 1979. doi: 10.2307/1914185.
+\bibitem{tversky1981}
+Tversky, A. and Kahneman, D. The framing of decisions and the psychology of choice.
+\emph{Science}, 211(4481):453--458, 1981. doi: 10.1126/science.7455683.
+\bibitem{tversky1992}
+Tversky, A. and Kahneman, D. Advances in prospect theory: cumulative representation of uncertainty.
+\emph{Journal of Risk and Uncertainty}, 5(4):297--323, 1992. doi: 10.1007/BF00122574.
+\bibitem{roberts2017}
+Roberts, D. R. et al. Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure.
+\emph{Ecography}, 40(8):913--929, 2017. doi: 10.1111/ecog.02881.
+\bibitem{geurts2006}
+Geurts, P., Ernst, D. and Wehenkel, L. Extremely randomized trees.
+\emph{Machine Learning}, 63(1):3--42, 2006. doi: 10.1007/s10994-006-6226-1.
+\bibitem{pedregosa2011}
+Pedregosa, F. et al. Scikit-learn: machine learning in Python.
+\emph{Journal of Machine Learning Research}, 12:2825--2830, 2011.
+\bibitem{fawcett2006}
+Fawcett, T. An introduction to ROC analysis.
+\emph{Pattern Recognition Letters}, 27(8):861--874, 2006. doi: 10.1016/j.patrec.2005.10.010.
+\end{thebibliography}
+
+\appendix
+\section{Additional results}
+
+\begin{table}[ht]
+\centering
+\caption{Experiments 2 and 3: effect of the split and of response time (final logistic regression, 5 folds, mean $\pm$ s.d.).}\label{tab:exp23}
+\small
+\begin{tabularx}{\linewidth}{@{}Xccc@{}}
+\toprule
+Setting & ROC-AUC & Log-loss & Accuracy \\
+\midrule
+Participant split (final LR)          & $0.818\pm0.013$ & $0.520\pm0.016$ & $0.734\pm0.015$ \\
+Random split (final LR)               & $0.818\pm0.014$ & $0.519\pm0.015$ & $0.734\pm0.015$ \\
++ \texttt{participant\_id}, participant split & $0.818\pm0.013$ & $0.520\pm0.017$ & $0.734\pm0.014$ \\
++ \texttt{participant\_id}, random split      & $0.839\pm0.013$ & $0.495\pm0.015$ & $0.752\pm0.017$ \\
++ \texttt{response\_time\_ms}, participant split & $0.818\pm0.012$ & $0.520\pm0.016$ & $0.733\pm0.015$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Regularisation of the final logistic regression (participant split, 5 folds).}\label{tab:appC}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+$C$ & 0.003 & 0.03 & 0.1 (final) & 1 \\
+\midrule
+ROC-AUC & $0.8175\pm0.0133$ & $0.8182\pm0.0126$ & $0.8182\pm0.0127$ & $0.8180\pm0.0130$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Paired AUC differences (same folds): mean $\pm$ s.d.\ over the 5 fold differences.}\label{tab:paired}
+\small
+\begin{tabularx}{\linewidth}{@{}Xc@{}}
+\toprule
+Comparison (A $-$ B) & $\Delta$AUC \\
+\midrule
+Final LR $-$ EV rule                        & $+0.090\pm0.011$ \\
+Final LR $-$ LR on raw numbers              & $+0.095\pm0.006$ \\
++ domain/frame $-$ + EV features only       & $+0.029\pm0.003$ \\
++ person/session traits $-$ + domain/frame  & $-0.002\pm0.003$ \\
+Final LR $-$ LR with frame$\times$EV interactions only & $+0.002\pm0.003$ \\
+ExtraTrees $-$ final LR                     & $+0.0003\pm0.0045$ \\
+Blend $-$ final LR                          & $+0.0018\pm0.0021$ \\
+Random split $-$ participant split (final LR) & $-0.0004\pm0.022$ \\
+Random $-$ participant split, with \texttt{participant\_id} & $+0.021\pm0.022$ \\
+Final LR with response time $-$ final LR    & $-0.0001\pm0.0008$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{AUC by domain/frame cell (pooled out-of-fold scores; the blend uses within-fold ranks).}\label{tab:cell}
+\small
+\begin{tabular}{@{}lrcccc@{}}
+\toprule
+Cell & $n$ & Share risky & EV rule & Final LR & Blend \\
+\midrule
+gain / gain frame  & 1\,731 & 0.398 & 0.632 & 0.672 & 0.679 \\
+gain / loss frame  & 1\,649 & 0.557 & 0.722 & 0.766 & 0.764 \\
+loss / none        & 2\,537 & 0.587 & 0.733 & 0.786 & 0.790 \\
+mixed / none       & 2\,483 & 0.383 & 0.858 & 0.898 & 0.901 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.6\linewidth]{fig_participant_acc.png}
+\caption{Out-of-fold accuracy per participant for the final logistic regression (210 participants).}\label{fig:pacc}
+\end{figure}
+
+\end{document}
